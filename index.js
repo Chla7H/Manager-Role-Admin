@@ -39,23 +39,35 @@ const client = new Client({
 const commands = [
     new SlashCommandBuilder()
         .setName('givepermissionrole')
-        .setDescription('Allow a specific role to give another specific role.')
+        .setDescription('Allow a manager role to give up to 5 specific roles.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addRoleOption(option => option.setName('manager_role').setDescription('The role that will be ALLOWED to give the role').setRequired(true))
-        .addRoleOption(option => option.setName('assignable_role').setDescription('The role they are allowed to GIVE').setRequired(true)),
+        .addRoleOption(opt => opt.setName('manager_role').setDescription('The role that will be ALLOWED to give the roles').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_1').setDescription('Role 1 they can give').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_2').setDescription('Role 2 they can give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_3').setDescription('Role 3 they can give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_4').setDescription('Role 4 they can give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_5').setDescription('Role 5 they can give').setRequired(false)),
         
     new SlashCommandBuilder()
         .setName('removepermission')
-        .setDescription('Remove a role-giving permission from a manager role.')
+        .setDescription('Remove permission from a manager role to give up to 5 roles.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addRoleOption(option => option.setName('manager_role').setDescription('The role losing the permission').setRequired(true))
-        .addRoleOption(option => option.setName('assignable_role').setDescription('The role they can no longer give').setRequired(true)),
+        .addRoleOption(opt => opt.setName('manager_role').setDescription('The role losing the permission').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_1').setDescription('Role 1 to remove').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_2').setDescription('Role 2 to remove').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_3').setDescription('Role 3 to remove').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_4').setDescription('Role 4 to remove').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_5').setDescription('Role 5 to remove').setRequired(false)),
 
     new SlashCommandBuilder()
         .setName('giverole')
-        .setDescription('Give a role to a user (if you have permission).')
-        .addUserOption(option => option.setName('user').setDescription('The user to receive the role').setRequired(true))
-        .addRoleOption(option => option.setName('role').setDescription('The role to give').setRequired(true)),
+        .setDescription('Give up to 5 roles to a user at once.')
+        .addUserOption(opt => opt.setName('user').setDescription('The user to receive the roles').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_1').setDescription('Role 1 to give').setRequired(true))
+        .addRoleOption(opt => opt.setName('role_2').setDescription('Role 2 to give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_3').setDescription('Role 3 to give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_4').setDescription('Role 4 to give').setRequired(false))
+        .addRoleOption(opt => opt.setName('role_5').setDescription('Role 5 to give').setRequired(false)),
 
     new SlashCommandBuilder()
         .setName('setuplogs')
@@ -67,13 +79,12 @@ const commands = [
 client.once('ready', async () => {
     console.log(`✅ Logged in as ${client.user.tag}`);
     
-    // Set Streaming Status
+    // Status Streaming
     client.user.setActivity('discord.gg/3zJKB6PyVx', { 
         type: ActivityType.Streaming, 
         url: 'https://www.twitch.tv/discord' 
     });
 
-    // Register Slash Commands
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     try {
         console.log('Started refreshing application (/) commands.');
@@ -108,37 +119,15 @@ client.on('interactionCreate', async interaction => {
     // 1. SETUP LOGS COMMAND
     if (commandName === 'setuplogs') {
         await interaction.deferReply({ ephemeral: true });
-
         try {
-            // Create Category
-            const category = await guild.channels.create({
-                name: '📋 BOT LOGS',
-                type: ChannelType.GuildCategory
-            });
+            const category = await guild.channels.create({ name: '📋 BOT LOGS', type: ChannelType.GuildCategory });
+            const roleLogs = await guild.channels.create({ name: 'role-gives-logs', type: ChannelType.GuildText, parent: category.id });
+            const permLogs = await guild.channels.create({ name: 'permission-updates', type: ChannelType.GuildText, parent: category.id });
 
-            // Create Role Give Logs
-            const roleLogs = await guild.channels.create({
-                name: 'role-gives-logs',
-                type: ChannelType.GuildText,
-                parent: category.id
-            });
-
-            // Create Permission Updates Logs
-            const permLogs = await guild.channels.create({
-                name: 'permission-updates',
-                type: ChannelType.GuildText,
-                parent: category.id
-            });
-
-            db.logChannels = {
-                roles: roleLogs.id,
-                permissions: permLogs.id
-            };
+            db.logChannels = { roles: roleLogs.id, permissions: permLogs.id };
             saveDatabase(db);
-
-            await interaction.editReply(`✅ Logs setup complete! Category and channels created.`);
+            await interaction.editReply(`✅ Logs setup complete!`);
         } catch (error) {
-            console.error(error);
             await interaction.editReply(`❌ Failed to create channels. Make sure the bot has Administrator permissions.`);
         }
     }
@@ -146,27 +135,38 @@ client.on('interactionCreate', async interaction => {
     // 2. GIVE PERMISSION ROLE COMMAND
     else if (commandName === 'givepermissionrole') {
         const managerRole = options.getRole('manager_role');
-        const assignableRole = options.getRole('assignable_role');
+        const rolesToAssign = [
+            options.getRole('role_1'), options.getRole('role_2'), 
+            options.getRole('role_3'), options.getRole('role_4'), 
+            options.getRole('role_5')
+        ].filter(r => r !== null);
 
         if (!db.permissions[managerRole.id]) db.permissions[managerRole.id] = [];
         
-        if (db.permissions[managerRole.id].includes(assignableRole.id)) {
-            return interaction.reply({ content: `⚠️ ${managerRole} already has permission to give ${assignableRole}.`, ephemeral: true });
+        let addedRoles = [];
+        for (const role of rolesToAssign) {
+            if (!db.permissions[managerRole.id].includes(role.id)) {
+                db.permissions[managerRole.id].push(role.id);
+                addedRoles.push(role);
+            }
         }
-
-        db.permissions[managerRole.id].push(assignableRole.id);
+        
         saveDatabase(db);
 
-        interaction.reply({ content: `✅ Permission granted! Users with ${managerRole} can now give ${assignableRole}.`, ephemeral: true });
+        if (addedRoles.length === 0) {
+            return interaction.reply({ content: `⚠️ ${managerRole} already has permission for the specified role(s).`, ephemeral: true });
+        }
 
-        // Logging
+        const addedRolesText = addedRoles.map(r => `<@&${r.id}>`).join(', ');
+        interaction.reply({ content: `✅ Permissions granted! ${managerRole} can now give: ${addedRolesText}`, ephemeral: true });
+
         const embed = new EmbedBuilder()
-            .setTitle('🟢 Permission Added')
+            .setTitle('🟢 Permissions Added')
             .setColor('Green')
             .addFields(
                 { name: 'Admin', value: `${interaction.user}`, inline: true },
                 { name: 'Manager Role', value: `${managerRole}`, inline: true },
-                { name: 'Assignable Role', value: `${assignableRole}`, inline: true }
+                { name: 'Assignable Roles', value: addedRolesText, inline: false }
             )
             .setTimestamp();
         sendLog(guild, 'permissions', embed);
@@ -175,25 +175,40 @@ client.on('interactionCreate', async interaction => {
     // 3. REMOVE PERMISSION COMMAND
     else if (commandName === 'removepermission') {
         const managerRole = options.getRole('manager_role');
-        const assignableRole = options.getRole('assignable_role');
+        const rolesToRemove = [
+            options.getRole('role_1'), options.getRole('role_2'), 
+            options.getRole('role_3'), options.getRole('role_4'), 
+            options.getRole('role_5')
+        ].filter(r => r !== null);
 
-        if (!db.permissions[managerRole.id] || !db.permissions[managerRole.id].includes(assignableRole.id)) {
-            return interaction.reply({ content: `⚠️ ${managerRole} does not currently have permission to give ${assignableRole}.`, ephemeral: true });
+        if (!db.permissions[managerRole.id]) {
+            return interaction.reply({ content: `⚠️ ${managerRole} has no permissions setup.`, ephemeral: true });
         }
 
-        db.permissions[managerRole.id] = db.permissions[managerRole.id].filter(id => id !== assignableRole.id);
+        let removedRoles = [];
+        for (const role of rolesToRemove) {
+            if (db.permissions[managerRole.id].includes(role.id)) {
+                db.permissions[managerRole.id] = db.permissions[managerRole.id].filter(id => id !== role.id);
+                removedRoles.push(role);
+            }
+        }
+        
         saveDatabase(db);
 
-        interaction.reply({ content: `✅ Permission removed! Users with ${managerRole} can no longer give ${assignableRole}.`, ephemeral: true });
+        if (removedRoles.length === 0) {
+            return interaction.reply({ content: `⚠️ ${managerRole} didn't have permission for the specified role(s) anyway.`, ephemeral: true });
+        }
 
-        // Logging
+        const removedRolesText = removedRoles.map(r => `<@&${r.id}>`).join(', ');
+        interaction.reply({ content: `✅ Permissions removed! ${managerRole} can no longer give: ${removedRolesText}`, ephemeral: true });
+
         const embed = new EmbedBuilder()
-            .setTitle('🔴 Permission Removed')
+            .setTitle('🔴 Permissions Removed')
             .setColor('Red')
             .addFields(
                 { name: 'Admin', value: `${interaction.user}`, inline: true },
                 { name: 'Manager Role', value: `${managerRole}`, inline: true },
-                { name: 'Assignable Role', value: `${assignableRole}`, inline: true }
+                { name: 'Removed Roles', value: removedRolesText, inline: false }
             )
             .setTimestamp();
         sendLog(guild, 'permissions', embed);
@@ -201,61 +216,83 @@ client.on('interactionCreate', async interaction => {
 
     // 4. GIVE ROLE COMMAND
     else if (commandName === 'giverole') {
+        await interaction.deferReply(); 
+
         const targetUser = options.getUser('user');
-        const roleToGive = options.getRole('role');
         const targetMember = await guild.members.fetch(targetUser.id);
+        const rolesToProcess = [
+            options.getRole('role_1'), options.getRole('role_2'), 
+            options.getRole('role_3'), options.getRole('role_4'), 
+            options.getRole('role_5')
+        ].filter(r => r !== null);
 
-        // A. Check if the user trying to use the command has a manager role with permission
         const userRoles = member.roles.cache.map(r => r.id);
-        let hasPermission = false;
+        const botHighestRole = guild.members.me.roles.highest;
 
-        for (const roleId of userRoles) {
-            if (db.permissions[roleId] && db.permissions[roleId].includes(roleToGive.id)) {
-                hasPermission = true;
-                break;
+        let successRoles = [];
+        let errorMessages = [];
+
+        for (const role of rolesToProcess) {
+            const hasPermission = userRoles.some(roleId => db.permissions[roleId] && db.permissions[roleId].includes(role.id));
+            if (!hasPermission) {
+                errorMessages.push(`❌ ${role}: You don't have permission.`);
+                continue;
+            }
+
+            if (botHighestRole.position <= role.position) {
+                errorMessages.push(`❌ ${role}: My role is too low to give this.`);
+                continue;
+            }
+
+            if (targetMember.roles.cache.has(role.id)) {
+                errorMessages.push(`⚠️ ${role}: User already has it.`);
+                continue;
+            }
+
+            try {
+                await targetMember.roles.add(role);
+                successRoles.push(role);
+            } catch (error) {
+                errorMessages.push(`❌ ${role}: Discord API error.`);
             }
         }
 
-        if (!hasPermission) {
-            return interaction.reply({ content: `❌ You do not have permission to give the ${roleToGive.name} role.`, ephemeral: true });
-        }
-
-        // B. Check Bot Role Hierarchy (Even if user is Admin, Bot MUST be higher than the role)
-        const botHighestRole = guild.members.me.roles.highest;
-        if (botHighestRole.position <= roleToGive.position) {
-            return interaction.reply({ 
-                content: `❌ I cannot give the ${roleToGive} role. My highest role must be placed ABOVE it in the server settings.`, 
-                ephemeral: true 
-            });
-        }
-
-        // C. Check if user already has the role
-        if (targetMember.roles.cache.has(roleToGive.id)) {
-            return interaction.reply({ content: `⚠️ ${targetUser} already has the ${roleToGive} role.`, ephemeral: true });
-        }
-
-        // Give the role
-        try {
-            await targetMember.roles.add(roleToGive);
-            await interaction.reply({ content: `✅ Successfully gave ${roleToGive} to ${targetUser}.` });
-
-            // Logging
+        let replyMsg = `**Action Complete for ${targetUser}:**\n`;
+        if (successRoles.length > 0) {
+            replyMsg += `✅ **Successfully Added:** ${successRoles.map(r => `<@&${r.id}>`).join(', ')}\n`;
+            
             const embed = new EmbedBuilder()
-                .setTitle('🔰 Role Granted')
+                .setTitle('🔰 Roles Granted')
                 .setColor('Blue')
                 .addFields(
                     { name: 'Given By', value: `${interaction.user}`, inline: true },
                     { name: 'Given To', value: `${targetUser}`, inline: true },
-                    { name: 'Role', value: `${roleToGive}`, inline: true }
+                    { name: 'Roles', value: successRoles.map(r => `<@&${r.id}>`).join(', '), inline: false }
                 )
                 .setTimestamp();
             sendLog(guild, 'roles', embed);
-
-        } catch (error) {
-            console.error(error);
-            interaction.reply({ content: `❌ An error occurred while trying to give the role.`, ephemeral: true });
         }
+        
+        if (errorMessages.length > 0) {
+            replyMsg += `\n**Errors/Warnings:**\n${errorMessages.join('\n')}`;
+        }
+
+        await interaction.editReply({ content: replyMsg });
     }
 });
 
+// ================= ERROR HANDLING (BASH MAYCRASHICH L'BOT) =================
+client.on('error', (error) => {
+    console.error('❌ Discord Client Error:', error);
+});
+
+process.on('unhandledRejection', (error) => {
+    console.error('⚠️ Unhandled Promise Rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('🚨 Uncaught Exception:', error);
+});
+
+// ================= LOGIN =================
 client.login(TOKEN);
