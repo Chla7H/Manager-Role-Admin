@@ -4,9 +4,14 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 
-const TOKEN = 'YOUR_BOT_TOKEN_HERE';
-const CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID || '1527805408779960370';
 const DATABASE_FILE = './database.json';
+
+if (!TOKEN) {
+    console.error('Missing DISCORD_TOKEN environment variable. Set DISCORD_TOKEN and restart the bot.');
+    process.exit(1);
+}
 
 function loadDatabase() {
     if (!fs.existsSync(DATABASE_FILE)) fs.writeFileSync(DATABASE_FILE, JSON.stringify({ permissions: {}, logChannels: {} }));
