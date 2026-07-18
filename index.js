@@ -4,9 +4,15 @@ const {
 } = require('discord.js');
 const fs = require('fs');
 
-const TOKEN = 'YOUR_BOT_TOKEN_HERE';
-const CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
+require('dotenv').config();
+const TOKEN = process.env.DISCORD_TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID || '1527805408779960370';
 const DATABASE_FILE = './database.json';
+
+if (!TOKEN) {
+    console.error('Missing DISCORD_TOKEN environment variable. Set DISCORD_TOKEN and restart the bot.');
+    process.exit(1);
+}
 
 function loadDatabase() {
     if (!fs.existsSync(DATABASE_FILE)) fs.writeFileSync(DATABASE_FILE, JSON.stringify({ permissions: {}, logChannels: {} }));
@@ -44,12 +50,33 @@ client.once(Events.ClientReady, async () => {
     console.log('Successfully registered commands.');
 });
 
-// Interaction logic remains the same as previously provided...
-// (Ensure you copy the interactionCreate logic from the previous message here)
-
+// Minimal interaction handler for testing commands
 client.on(Events.InteractionCreate, async interaction => {
     if (!interaction.isChatInputCommand()) return;
-    // [Insert the rest of your interaction logic here]
+    const commandName = interaction.commandName;
+    try {
+        if (commandName === 'giverole') {
+            const user = interaction.options.getUser('user');
+            if (!interaction.guild) return interaction.reply({ content: 'This command must be used in a server.', ephemeral: true });
+            const member = await interaction.guild.members.fetch(user.id);
+            const rolesToAdd = [];
+            for (let i = 1; i <= 24; i++) {
+                const role = interaction.options.getRole(`role_${i}`);
+                if (role) rolesToAdd.push(role.id);
+            }
+            if (rolesToAdd.length === 0) return interaction.reply({ content: 'No roles provided.', ephemeral: true });
+            await member.roles.add(rolesToAdd, `Given by ${interaction.user.tag}`);
+            return interaction.reply({ content: `Assigned ${rolesToAdd.length} role(s) to ${user.tag}.`, ephemeral: false });
+        }
+
+        // Fallback for other commands
+        await interaction.reply({ content: 'Command not implemented in this test build.', ephemeral: true });
+    } catch (err) {
+        console.error('Interaction handler error:', err);
+        if (!interaction.replied) {
+            try { await interaction.reply({ content: 'An error occurred while processing the command.', ephemeral: true }); } catch (_) {}
+        }
+    }
 });
 
 client.login(TOKEN);
